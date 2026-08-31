@@ -4,7 +4,8 @@ from typing import List, Optional
 from datetime import datetime
 from ...core.database import get_db
 from ...core.security import get_current_active_user, get_current_admin_user
-from ...models.aftercare import Aftercare, AftercareFollowUp
+from ...models.aftercare import Aftercare
+from ...models.aftercare_followup import AftercareFollowUp
 from ...models.ai_conversation import AIConversation, ConversationStatus
 from ...models.ai_message import AIMessage, MessageAuthor, RiskLevel
 from ...models.human_review import HumanReview, ReviewPriority, ReviewDecision

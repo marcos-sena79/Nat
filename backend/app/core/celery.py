@@ -1,5 +1,7 @@
 from celery import Celery
+from celery.schedules import crontab
 from .config import settings
+import ssl
 
 celery_app = Celery(
     "body_piercing",
@@ -7,12 +9,15 @@ celery_app = Celery(
     backend=settings.REDIS_URL,
     include=[
         "app.tasks.notifications",
+        "app.tasks.orders",
         "app.tasks.reports",
         "app.tasks.webhooks",
     ]
 )
 
 celery_app.conf.update(
+    broker_use_ssl={"ssl_cert_reqs": ssl.CERT_REQUIRED},
+    redis_backend_use_ssl={"ssl_cert_reqs": ssl.CERT_REQUIRED},
     task_serializer="json",
     accept_content=["json"],
     result_serializer="json",
@@ -41,9 +46,6 @@ celery_app.conf.beat_schedule = {
     },
     "generate-daily-report": {
         "task": "app.tasks.reports.generate_daily_report",
-        "schedule": {
-            "hour": 23,
-            "minute": 59,
-        },
+        "schedule": crontab(hour=23, minute=59),
     },
 }

@@ -2,7 +2,8 @@ from datetime import datetime, timedelta
 from ..core.celery import celery_app
 from ..core.database import SessionLocal
 from ..models.appointment import Appointment, AppointmentStatus
-from ..models.aftercare import Aftercare, AftercareFollowUp
+from ..models.aftercare import Aftercare
+from ..models.aftercare_followup import AftercareFollowUp
 
 @celery_app.task(name="app.tasks.notifications.send_appointment_reminders")
 def send_appointment_reminders():
