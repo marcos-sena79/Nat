@@ -5,10 +5,13 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from ...core.database import get_db
 from ...core.security import get_current_active_user, get_current_admin_user
-from ...models.order import Order, OrderItem, OrderStatus
-from ...models.product import Product, ProductVariation
+from ...models.order import Order, OrderStatus
+from ...models.order_item import OrderItem
+from ...models.product import Product
+from ...models.product_variation import ProductVariation
 from ...models.service import Service
-from ...models.coupon import Coupon, CouponUsage
+from ...models.coupon import Coupon
+from ...models.coupon_usage import CouponUsage
 from ...schemas.order import (
     OrderCreate, OrderResponse, OrderList,
     CartItem, Cart

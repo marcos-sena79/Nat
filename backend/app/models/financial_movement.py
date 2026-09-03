@@ -40,6 +40,7 @@ class FinancialMovement(Base):
     payment_method = Column(String)
     status = Column(String, default="completed")
     notes = Column(Text)
+    created_by = Column(Integer, ForeignKey("users.id"))
     movement_date = Column(DateTime(timezone=True), server_default=func.now())
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     

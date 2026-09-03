@@ -3,7 +3,9 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from ...core.database import get_db
 from ...core.security import get_current_active_user, get_current_admin_user
-from ...models.product import Product, ProductVariation, ProductImage
+from ...models.product import Product
+from ...models.product_variation import ProductVariation
+from ...models.product_image import ProductImage
 from ...schemas.product import (
     ProductCreate, ProductResponse, ProductList,
     ProductVariationCreate, ProductVariationResponse
