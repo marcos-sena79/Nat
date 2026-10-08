@@ -6,8 +6,8 @@ import { Toaster } from 'react-hot-toast'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Body Piercing & Pinturas em Tecido',
-  description: 'Plataforma completa de Body Piercing e Pinturas em Tecido',
+  title: 'Atelier Corpo & Cor',
+  description: 'Piercing consciente, joias em titânio e arte têxtil autoral em São Paulo.',
 }
 
 export default function RootLayout({

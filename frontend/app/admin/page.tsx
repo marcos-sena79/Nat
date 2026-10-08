@@ -1,64 +1,302 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { api } from '@/lib/api'
 import toast from 'react-hot-toast'
+import { isAxiosError } from 'axios'
 
 type AdminTab = 'dashboard' | 'products' | 'services' | 'orders' | 'appointments' | 'inventory' | 'pricing' | 'finance' | 'reviews' | 'coupons'
+type CreateDialog = 'product' | 'service' | 'supply' | 'movement' | null
+
+interface DashboardSummary {
+  total_revenue: number
+  total_expenses: number
+  net_profit: number
+  pending_orders: number
+  pending_appointments: number
+  low_stock_items: number
+  pending_reviews: number
+}
+
+interface Product {
+  id: number
+  name: string
+  category: string
+  base_price: number
+  stock: number
+  is_active: boolean
+}
+
+interface Service {
+  id: number
+  name: string
+  service_type: string
+  duration_minutes: number
+  price: number
+  deposit_amount: number
+  is_active: boolean
+}
+
+interface Order {
+  id: number
+  total: number
+  status: string
+  items_count: number
+  created_at: string
+}
+
+interface Appointment {
+  id: number
+  service_name: string
+  client_name: string
+  start_time: string
+  end_time: string
+  status: string
+}
+
+interface Supply {
+  id: number
+  name: string
+  category: string
+  unit: string
+  current_stock: number
+  min_stock: number
+  average_cost: number
+}
+
+interface CostSheet {
+  id: number
+  item_type: string
+  product_name: string | null
+  service_name: string | null
+  total_cost: number | null
+  suggested_price: number | null
+}
+
+interface Review {
+  id: number
+  priority: string
+  reason: string
+  decision: string
+  created_at: string
+}
+
+interface FinancialMovement {
+  id: number
+  movement_type: 'income' | 'expense'
+  category: string
+  amount: number
+  description: string | null
+  movement_date: string
+}
 
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard')
-  const [dashboard, setDashboard] = useState<any>(null)
-  const [products, setProducts] = useState<any[]>([])
-  const [orders, setOrders] = useState<any[]>([])
-  const [appointments, setAppointments] = useState<any[]>([])
-  const [supplies, setSupplies] = useState<any[]>([])
-  const [reviews, setReviews] = useState<any[]>([])
-  const [movements, setMovements] = useState<any[]>([])
+  const [dashboard, setDashboard] = useState<DashboardSummary | null>(null)
+  const [products, setProducts] = useState<Product[]>([])
+  const [services, setServices] = useState<Service[]>([])
+  const [orders, setOrders] = useState<Order[]>([])
+  const [appointments, setAppointments] = useState<Appointment[]>([])
+  const [supplies, setSupplies] = useState<Supply[]>([])
+  const [costSheets, setCostSheets] = useState<CostSheet[]>([])
+  const [reviews, setReviews] = useState<Review[]>([])
+  const [movements, setMovements] = useState<FinancialMovement[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+  const [savingId, setSavingId] = useState<number | null>(null)
+  const [createDialog, setCreateDialog] = useState<CreateDialog>(null)
+  const [creating, setCreating] = useState(false)
 
-  useEffect(() => {
-    fetchData()
-  }, [activeTab])
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async (tab: AdminTab) => {
     setLoading(true)
+    setLoadError('')
     try {
-      switch (activeTab) {
+      switch (tab) {
         case 'dashboard':
-          const dashRes = await api.get('/admin/dashboard')
-          setDashboard(dashRes.data)
+          {
+            const [summaryResponse, reviewsResponse] = await Promise.all([
+              api.get<Omit<DashboardSummary, 'pending_reviews'>>('/finance/dashboard'),
+              api.get<Review[]>('/aftercare/reviews', { params: { status: 'pending' } }),
+            ])
+            setDashboard({
+              ...summaryResponse.data,
+              pending_reviews: reviewsResponse.data.length,
+            })
+          }
           break
         case 'products':
-          const prodRes = await api.get('/catalog/products')
-          setProducts(prodRes.data)
+          setProducts((await api.get<Product[]>('/catalog/products')).data)
+          break
+        case 'services':
+          setServices((await api.get<Service[]>('/scheduling/services')).data)
           break
         case 'orders':
-          const ordRes = await api.get('/orders')
-          setOrders(ordRes.data)
+          setOrders((await api.get<Order[]>('/orders/orders')).data)
           break
         case 'appointments':
-          const apptRes = await api.get('/scheduling/appointments')
-          setAppointments(apptRes.data)
+          setAppointments((await api.get<Appointment[]>('/scheduling/appointments')).data)
           break
         case 'inventory':
-          const invRes = await api.get('/inventory/supplies')
-          setSupplies(invRes.data)
+          setSupplies((await api.get<Supply[]>('/inventory/supplies')).data)
+          break
+        case 'pricing':
+          setCostSheets((await api.get<CostSheet[]>('/pricing/cost-sheets')).data)
           break
         case 'reviews':
-          const revRes = await api.get('/aftercare/reviews')
-          setReviews(revRes.data)
+          setReviews((await api.get<Review[]>('/aftercare/reviews', { params: { status: 'pending' } })).data)
           break
         case 'finance':
-          const finRes = await api.get('/finance/movements')
-          setMovements(finRes.data)
+          setMovements((await api.get<FinancialMovement[]>('/finance/movements')).data)
+          break
+        case 'coupons':
+          setLoadError('O backend atual ainda não disponibiliza uma rota administrativa para listar ou gerenciar cupons.')
           break
       }
     } catch (error) {
-      console.error('Error fetching data:', error)
+      const message = isAxiosError(error)
+        ? error.response?.data?.detail || error.message
+        : error instanceof Error ? error.message : 'Erro desconhecido'
+      setLoadError(`Não foi possível carregar esta área: ${message}`)
+      toast.error(`Erro ao carregar ${tab === 'dashboard' ? 'o painel' : `a aba ${tab}`}`)
     } finally {
       setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void fetchData(activeTab)
+  }, [activeTab, fetchData])
+
+  const updateOrderStatus = async (orderId: number, newStatus: string) => {
+    setSavingId(orderId)
+    try {
+      await api.put(`/orders/orders/${orderId}/status`, null, { params: { new_status: newStatus } })
+      toast.success(`Pedido #${orderId} atualizado`)
+      await fetchData('orders')
+    } catch (error) {
+      toast.error(isAxiosError(error) ? error.response?.data?.detail || 'Não foi possível atualizar o pedido' : 'Não foi possível atualizar o pedido')
+    } finally {
+      setSavingId(null)
+    }
+  }
+
+  const cancelAppointment = async (appointmentId: number) => {
+    setSavingId(appointmentId)
+    try {
+      await api.put(`/scheduling/appointments/${appointmentId}/cancel`)
+      toast.success('Agendamento cancelado')
+      await fetchData('appointments')
+    } catch (error) {
+      toast.error(isAxiosError(error) ? error.response?.data?.detail || 'Não foi possível cancelar o agendamento' : 'Não foi possível cancelar o agendamento')
+    } finally {
+      setSavingId(null)
+    }
+  }
+
+  const decideReview = async (reviewId: number, decision: 'approved' | 'needs_followup') => {
+    const enteredNotes = decision === 'needs_followup'
+      ? window.prompt('Observação para o acompanhamento (opcional):')
+      : null
+    if (decision === 'needs_followup' && enteredNotes === null) return
+    const notes = enteredNotes?.trim() || undefined
+
+    setSavingId(reviewId)
+    try {
+      await api.put(`/aftercare/reviews/${reviewId}`, null, {
+        params: { decision, ...(notes ? { notes } : {}) },
+      })
+      toast.success(decision === 'approved' ? 'Revisão aprovada' : 'Acompanhamento solicitado')
+      await fetchData(activeTab)
+    } catch (error) {
+      toast.error(isAxiosError(error) ? error.response?.data?.detail || 'Não foi possível atualizar a revisão' : 'Não foi possível atualizar a revisão')
+    } finally {
+      setSavingId(null)
+    }
+  }
+
+  const deactivateProduct = async (productId: number) => {
+    if (!window.confirm('Deseja desativar este produto?')) return
+
+    setSavingId(productId)
+    try {
+      await api.delete(`/catalog/products/${productId}`)
+      toast.success('Produto desativado')
+      await fetchData('products')
+    } catch (error) {
+      toast.error(isAxiosError(error) ? error.response?.data?.detail || 'Não foi possível desativar o produto' : 'Não foi possível desativar o produto')
+    } finally {
+      setSavingId(null)
+    }
+  }
+
+  const createEntry = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!createDialog) return
+
+    const formData = new FormData(event.currentTarget)
+    let endpoint = ''
+    let payload: Record<string, string | number | boolean> = {}
+    let tab: AdminTab = activeTab
+
+    if (createDialog === 'product') {
+      endpoint = '/catalog/products'
+      tab = 'products'
+      payload = {
+        name: String(formData.get('name')),
+        category: String(formData.get('category')),
+        description: String(formData.get('description') || ''),
+        base_price: Number(formData.get('base_price')),
+        stock: Number(formData.get('stock')),
+        min_stock: Number(formData.get('min_stock')),
+        is_active: true,
+        is_eligible_for_piercing: false,
+      }
+    } else if (createDialog === 'service') {
+      endpoint = '/scheduling/services'
+      tab = 'services'
+      payload = {
+        name: String(formData.get('name')),
+        service_type: String(formData.get('service_type')),
+        description: String(formData.get('description') || ''),
+        duration_minutes: Number(formData.get('duration_minutes')),
+        price: Number(formData.get('price')),
+        deposit_amount: Number(formData.get('deposit_amount')),
+        payment_policy: String(formData.get('payment_policy')),
+        is_active: true,
+      }
+    } else if (createDialog === 'supply') {
+      endpoint = '/inventory/supplies'
+      tab = 'inventory'
+      payload = {
+        name: String(formData.get('name')),
+        category: String(formData.get('category')),
+        unit: String(formData.get('unit')),
+        current_stock: Number(formData.get('current_stock')),
+        min_stock: Number(formData.get('min_stock')),
+      }
+    } else {
+      endpoint = '/finance/movements'
+      tab = 'finance'
+      payload = {
+        movement_type: String(formData.get('movement_type')),
+        category: String(formData.get('category')),
+        amount: Number(formData.get('amount')),
+        description: String(formData.get('description') || ''),
+        movement_date: new Date(String(formData.get('movement_date'))).toISOString(),
+      }
+    }
+
+    setCreating(true)
+    try {
+      await api.post(endpoint, payload)
+      toast.success('Cadastro realizado com sucesso')
+      setCreateDialog(null)
+      await fetchData(tab)
+    } catch (error) {
+      toast.error(isAxiosError(error) ? error.response?.data?.detail || 'Não foi possível salvar os dados' : 'Não foi possível salvar os dados')
+    } finally {
+      setCreating(false)
     }
   }
 
@@ -113,6 +351,18 @@ export default function AdminPage() {
             <div className="text-center py-12">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-600 mx-auto"></div>
             </div>
+          ) : loadError ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-5 text-sm text-red-800" role="alert">
+              {loadError}
+              {activeTab !== 'coupons' && (
+                <button
+                  onClick={() => void fetchData(activeTab)}
+                  className="ml-3 font-semibold underline"
+                >
+                  Tentar novamente
+                </button>
+              )}
+            </div>
           ) : (
             <>
               {activeTab === 'dashboard' && dashboard && (
@@ -121,25 +371,25 @@ export default function AdminPage() {
                     <div className="bg-white rounded-lg shadow-md p-6">
                       <p className="text-sm text-gray-500">Receita do Mês</p>
                       <p className="text-2xl font-bold text-green-600">
-                        R$ {Number(dashboard.total_revenue || 0).toFixed(2)}
+                        {Number(dashboard.total_revenue).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                       </p>
                     </div>
                     <div className="bg-white rounded-lg shadow-md p-6">
                       <p className="text-sm text-gray-500">Despesas do Mês</p>
                       <p className="text-2xl font-bold text-red-600">
-                        R$ {Number(dashboard.total_expenses || 0).toFixed(2)}
+                        {Number(dashboard.total_expenses).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                       </p>
                     </div>
                     <div className="bg-white rounded-lg shadow-md p-6">
                       <p className="text-sm text-gray-500">Lucro Líquido</p>
                       <p className="text-2xl font-bold text-pink-600">
-                        R$ {Number(dashboard.net_profit || 0).toFixed(2)}
+                        {Number(dashboard.net_profit).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                       </p>
                     </div>
                     <div className="bg-white rounded-lg shadow-md p-6">
                       <p className="text-sm text-gray-500">Pedidos Pendentes</p>
                       <p className="text-2xl font-bold text-orange-600">
-                        {dashboard.pending_orders || 0}
+                        {dashboard.pending_orders}
                       </p>
                     </div>
                   </div>
@@ -147,19 +397,19 @@ export default function AdminPage() {
                     <div className="bg-white rounded-lg shadow-md p-6">
                       <p className="text-sm text-gray-500">Agendamentos Pendentes</p>
                       <p className="text-2xl font-bold text-blue-600">
-                        {dashboard.pending_appointments || 0}
+                        {dashboard.pending_appointments}
                       </p>
                     </div>
                     <div className="bg-white rounded-lg shadow-md p-6">
                       <p className="text-sm text-gray-500">Itens com Estoque Baixo</p>
                       <p className="text-2xl font-bold text-yellow-600">
-                        {dashboard.low_stock_items || 0}
+                        {dashboard.low_stock_items}
                       </p>
                     </div>
                     <div className="bg-white rounded-lg shadow-md p-6">
                       <p className="text-sm text-gray-500">Revisões Pendentes</p>
                       <p className="text-2xl font-bold text-purple-600">
-                        {dashboard.pending_reviews || 0}
+                        {dashboard.pending_reviews}
                       </p>
                     </div>
                   </div>
@@ -170,9 +420,10 @@ export default function AdminPage() {
                 <div className="bg-white rounded-lg shadow-md overflow-hidden">
                   <div className="p-4 border-b flex justify-between items-center">
                     <h2 className="text-xl font-semibold">Produtos</h2>
-                    <button className="bg-pink-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-pink-700">
-                      + Novo Produto
-                    </button>
+                    <button
+                      onClick={() => setCreateDialog('product')}
+                      className="bg-pink-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-pink-700"
+                    >+ Novo Produto</button>
                   </div>
                   <table className="w-full">
                     <thead className="bg-gray-50">
@@ -185,7 +436,9 @@ export default function AdminPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y">
-                      {products.map((product) => (
+                      {products.length === 0 ? (
+                        <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-500">Nenhum produto ativo encontrado.</td></tr>
+                      ) : products.map((product) => (
                         <tr key={product.id} className="hover:bg-gray-50">
                           <td className="px-4 py-3 text-sm">{product.name}</td>
                           <td className="px-4 py-3 text-sm">
@@ -196,8 +449,11 @@ export default function AdminPage() {
                           <td className="px-4 py-3 text-sm">R$ {Number(product.base_price).toFixed(2)}</td>
                           <td className="px-4 py-3 text-sm">{product.stock}</td>
                           <td className="px-4 py-3 text-sm">
-                            <button className="text-pink-600 hover:text-pink-800 mr-2">Editar</button>
-                            <button className="text-red-600 hover:text-red-800">Excluir</button>
+                            <button
+                              onClick={() => void deactivateProduct(product.id)}
+                              disabled={savingId === product.id}
+                              className="text-red-600 hover:text-red-800 disabled:opacity-50"
+                            >{savingId === product.id ? 'Desativando...' : 'Desativar'}</button>
                           </td>
                         </tr>
                       ))}
@@ -222,7 +478,9 @@ export default function AdminPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y">
-                      {orders.map((order) => (
+                      {orders.length === 0 ? (
+                        <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-500">Nenhum pedido encontrado.</td></tr>
+                      ) : orders.map((order) => (
                         <tr key={order.id} className="hover:bg-gray-50">
                           <td className="px-4 py-3 text-sm">{order.id}</td>
                           <td className="px-4 py-3 text-sm">R$ {Number(order.total).toFixed(2)}</td>
@@ -239,7 +497,17 @@ export default function AdminPage() {
                             {new Date(order.created_at).toLocaleDateString('pt-BR')}
                           </td>
                           <td className="px-4 py-3 text-sm">
-                            <button className="text-pink-600 hover:text-pink-800">Ver</button>
+                            <select
+                              value={order.status}
+                              onChange={(event) => void updateOrderStatus(order.id, event.target.value)}
+                              disabled={savingId === order.id}
+                              aria-label={`Status do pedido ${order.id}`}
+                              className="rounded border border-gray-200 bg-white px-2 py-1 text-xs disabled:opacity-50"
+                            >
+                              {['pending', 'paid', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded'].map((status) => (
+                                <option key={status} value={status}>{status}</option>
+                              ))}
+                            </select>
                           </td>
                         </tr>
                       ))}
@@ -276,6 +544,15 @@ export default function AdminPage() {
                             <p className="text-sm text-gray-600 mt-2">
                               {new Date(appt.start_time).toLocaleString('pt-BR')}
                             </p>
+                            {appt.status !== 'cancelled' && appt.status !== 'completed' && (
+                              <button
+                                onClick={() => void cancelAppointment(appt.id)}
+                                disabled={savingId === appt.id}
+                                className="mt-3 text-xs text-red-600 hover:text-red-800 disabled:opacity-50"
+                              >
+                                {savingId === appt.id ? 'Cancelando...' : 'Cancelar agendamento'}
+                              </button>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -288,9 +565,10 @@ export default function AdminPage() {
                 <div className="bg-white rounded-lg shadow-md overflow-hidden">
                   <div className="p-4 border-b flex justify-between items-center">
                     <h2 className="text-xl font-semibold">Insumos</h2>
-                    <button className="bg-pink-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-pink-700">
-                      + Novo Insumo
-                    </button>
+                    <button
+                      onClick={() => setCreateDialog('supply')}
+                      className="bg-pink-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-pink-700"
+                    >+ Novo Insumo</button>
                   </div>
                   <table className="w-full">
                     <thead className="bg-gray-50">
@@ -349,10 +627,18 @@ export default function AdminPage() {
                                 <p className="mt-2 text-gray-700">{review.reason}</p>
                               </div>
                               <div className="flex gap-2">
-                                <button className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700">
+                                <button
+                                  onClick={() => void decideReview(review.id, 'approved')}
+                                  disabled={savingId === review.id}
+                                  className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 disabled:opacity-50"
+                                >
                                   Aprovar
                                 </button>
-                                <button className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700">
+                                <button
+                                  onClick={() => void decideReview(review.id, 'needs_followup')}
+                                  disabled={savingId === review.id}
+                                  className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 disabled:opacity-50"
+                                >
                                   Responder
                                 </button>
                               </div>
@@ -406,9 +692,10 @@ export default function AdminPage() {
                   <div className="bg-white rounded-lg shadow-md overflow-hidden">
                     <div className="p-4 border-b flex justify-between items-center">
                       <h2 className="text-xl font-semibold">Lançamentos</h2>
-                      <button className="bg-pink-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-pink-700">
-                        + Novo Lançamento
-                      </button>
+                      <button
+                        onClick={() => setCreateDialog('movement')}
+                        className="bg-pink-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-pink-700"
+                      >+ Novo Lançamento</button>
                     </div>
                     <table className="w-full">
                       <thead className="bg-gray-50">
@@ -448,14 +735,9 @@ export default function AdminPage() {
                 <div className="bg-white rounded-lg shadow-md overflow-hidden">
                   <div className="p-4 border-b flex justify-between items-center">
                     <h2 className="text-xl font-semibold">Cupons de Desconto</h2>
-                    <button className="bg-pink-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-pink-700">
-                      + Novo Cupom
-                    </button>
                   </div>
                   <div className="p-4">
-                    <p className="text-gray-500 text-center py-8">
-                      Gerencie cupons de desconto para sua loja
-                    </p>
+                    <p className="py-8 text-center text-gray-500">O backend atual não oferece gerenciamento administrativo de cupons.</p>
                   </div>
                 </div>
               )}
@@ -464,14 +746,40 @@ export default function AdminPage() {
                 <div className="bg-white rounded-lg shadow-md overflow-hidden">
                   <div className="p-4 border-b flex justify-between items-center">
                     <h2 className="text-xl font-semibold">Serviços</h2>
-                    <button className="bg-pink-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-pink-700">
-                      + Novo Serviço
-                    </button>
+                    <button
+                      onClick={() => setCreateDialog('service')}
+                      className="bg-pink-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-pink-700"
+                    >+ Novo Serviço</button>
                   </div>
                   <div className="p-4">
-                    <p className="text-gray-500 text-center py-8">
-                      Gerencie serviços de perfuração, troca e acompanhamento
-                    </p>
+                    {services.length === 0 ? (
+                      <p className="py-8 text-center text-gray-500">Nenhum serviço ativo encontrado.</p>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Serviço</th>
+                              <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Tipo</th>
+                              <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Duração</th>
+                              <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Preço</th>
+                              <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Sinal</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {services.map((service) => (
+                              <tr key={service.id}>
+                                <td className="px-4 py-3 text-sm font-medium">{service.name}</td>
+                                <td className="px-4 py-3 text-sm">{service.service_type}</td>
+                                <td className="px-4 py-3 text-sm">{service.duration_minutes} min</td>
+                                <td className="px-4 py-3 text-sm">{Number(service.price).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                                <td className="px-4 py-3 text-sm">{Number(service.deposit_amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -482,9 +790,32 @@ export default function AdminPage() {
                     <h2 className="text-xl font-semibold">Fichas de Custo e Precificação</h2>
                   </div>
                   <div className="p-4">
-                    <p className="text-gray-500 text-center py-8">
-                      Configure fichas de custo para produtos e serviços
-                    </p>
+                    {costSheets.length === 0 ? (
+                      <p className="py-8 text-center text-gray-500">Nenhuma ficha de custo cadastrada.</p>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Item</th>
+                              <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Tipo</th>
+                              <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Custo total</th>
+                              <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Preço sugerido</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {costSheets.map((sheet) => (
+                              <tr key={sheet.id}>
+                                <td className="px-4 py-3 text-sm font-medium">{sheet.product_name || sheet.service_name || `Ficha #${sheet.id}`}</td>
+                                <td className="px-4 py-3 text-sm">{sheet.item_type === 'product' ? 'Produto' : 'Serviço'}</td>
+                                <td className="px-4 py-3 text-sm">{sheet.total_cost == null ? '—' : Number(sheet.total_cost).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                                <td className="px-4 py-3 text-sm">{sheet.suggested_price == null ? '—' : Number(sheet.suggested_price).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -492,6 +823,137 @@ export default function AdminPage() {
           )}
         </div>
       </div>
+      {createDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="presentation">
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="create-entry-title"
+            className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-xl bg-white p-6 shadow-xl"
+          >
+            <div className="mb-5 flex items-center justify-between gap-4">
+              <h2 id="create-entry-title" className="text-xl font-semibold">
+                {createDialog === 'product' ? 'Novo produto' : createDialog === 'service' ? 'Novo serviço' : createDialog === 'supply' ? 'Novo insumo' : 'Novo lançamento financeiro'}
+              </h2>
+              <button type="button" onClick={() => setCreateDialog(null)} className="rounded px-2 py-1 text-gray-500 hover:bg-gray-100" aria-label="Fechar">✕</button>
+            </div>
+            <form onSubmit={createEntry} className="space-y-4">
+              {(createDialog === 'product' || createDialog === 'service' || createDialog === 'supply') && (
+                <label className="block text-sm">
+                  <span className="mb-1 block text-gray-600">Nome</span>
+                  <input name="name" required className="w-full rounded-lg border border-gray-300 px-3 py-2" />
+                </label>
+              )}
+              {createDialog === 'product' && (
+                <>
+                  <label className="block text-sm">
+                    <span className="mb-1 block text-gray-600">Categoria</span>
+                    <select name="category" required className="w-full rounded-lg border border-gray-300 px-3 py-2">
+                      <option value="jewelry">Joias</option>
+                      <option value="paintings">Pinturas</option>
+                      <option value="aftercare">Cuidados</option>
+                    </select>
+                  </label>
+                  <label className="block text-sm">
+                    <span className="mb-1 block text-gray-600">Descrição</span>
+                    <textarea name="description" rows={3} className="w-full rounded-lg border border-gray-300 px-3 py-2" />
+                  </label>
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <label className="block text-sm"><span className="mb-1 block text-gray-600">Preço</span><input name="base_price" type="number" min="0" step="0.01" required className="w-full rounded-lg border border-gray-300 px-3 py-2" /></label>
+                    <label className="block text-sm"><span className="mb-1 block text-gray-600">Estoque</span><input name="stock" type="number" min="0" defaultValue="0" required className="w-full rounded-lg border border-gray-300 px-3 py-2" /></label>
+                    <label className="block text-sm"><span className="mb-1 block text-gray-600">Estoque mínimo</span><input name="min_stock" type="number" min="0" defaultValue="0" required className="w-full rounded-lg border border-gray-300 px-3 py-2" /></label>
+                  </div>
+                </>
+              )}
+              {createDialog === 'service' && (
+                <>
+                  <label className="block text-sm">
+                    <span className="mb-1 block text-gray-600">Tipo de serviço</span>
+                    <select name="service_type" required className="w-full rounded-lg border border-gray-300 px-3 py-2">
+                      <option value="piercing">Perfuração</option>
+                      <option value="jewelry_change">Troca de joia</option>
+                      <option value="evaluation">Avaliação</option>
+                      <option value="aftercare">Pós-atendimento</option>
+                      <option value="home_visit">Visita domiciliar</option>
+                    </select>
+                  </label>
+                  <label className="block text-sm">
+                    <span className="mb-1 block text-gray-600">Descrição</span>
+                    <textarea name="description" rows={3} className="w-full rounded-lg border border-gray-300 px-3 py-2" />
+                  </label>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <label className="block text-sm"><span className="mb-1 block text-gray-600">Duração (minutos)</span><input name="duration_minutes" type="number" min="1" required className="w-full rounded-lg border border-gray-300 px-3 py-2" /></label>
+                    <label className="block text-sm"><span className="mb-1 block text-gray-600">Preço</span><input name="price" type="number" min="0" step="0.01" required className="w-full rounded-lg border border-gray-300 px-3 py-2" /></label>
+                    <label className="block text-sm"><span className="mb-1 block text-gray-600">Sinal</span><input name="deposit_amount" type="number" min="0" step="0.01" defaultValue="0" required className="w-full rounded-lg border border-gray-300 px-3 py-2" /></label>
+                    <label className="block text-sm">
+                      <span className="mb-1 block text-gray-600">Política de pagamento</span>
+                      <select name="payment_policy" className="w-full rounded-lg border border-gray-300 px-3 py-2">
+                        <option value="full">Pagamento integral</option>
+                        <option value="deposit_only">Somente sinal</option>
+                        <option value="free">Gratuito</option>
+                      </select>
+                    </label>
+                  </div>
+                </>
+              )}
+              {createDialog === 'supply' && (
+                <>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <label className="block text-sm"><span className="mb-1 block text-gray-600">Categoria</span><input name="category" required className="w-full rounded-lg border border-gray-300 px-3 py-2" /></label>
+                    <label className="block text-sm"><span className="mb-1 block text-gray-600">Unidade</span><input name="unit" placeholder="un, ml, g..." required className="w-full rounded-lg border border-gray-300 px-3 py-2" /></label>
+                    <label className="block text-sm"><span className="mb-1 block text-gray-600">Estoque atual</span><input name="current_stock" type="number" min="0" defaultValue="0" required className="w-full rounded-lg border border-gray-300 px-3 py-2" /></label>
+                    <label className="block text-sm"><span className="mb-1 block text-gray-600">Estoque mínimo</span><input name="min_stock" type="number" min="0" defaultValue="0" required className="w-full rounded-lg border border-gray-300 px-3 py-2" /></label>
+                  </div>
+                </>
+              )}
+              {createDialog === 'movement' && (
+                <>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <label className="block text-sm">
+                      <span className="mb-1 block text-gray-600">Tipo</span>
+                      <select name="movement_type" className="w-full rounded-lg border border-gray-300 px-3 py-2">
+                        <option value="income">Receita</option>
+                        <option value="expense">Despesa</option>
+                      </select>
+                    </label>
+                    <label className="block text-sm">
+                      <span className="mb-1 block text-gray-600">Categoria</span>
+                      <select name="category" className="w-full rounded-lg border border-gray-300 px-3 py-2">
+                        <option value="sale">Venda</option>
+                        <option value="deposit">Sinal</option>
+                        <option value="service_payment">Pagamento de serviço</option>
+                        <option value="refund">Reembolso</option>
+                        <option value="adjustment_in">Ajuste de entrada</option>
+                        <option value="supply_purchase">Compra de insumos</option>
+                        <option value="rent">Aluguel</option>
+                        <option value="utilities">Contas</option>
+                        <option value="internet">Internet</option>
+                        <option value="transport">Transporte</option>
+                        <option value="marketing">Marketing</option>
+                        <option value="fees">Taxas</option>
+                        <option value="other_expense">Outra despesa</option>
+                        <option value="adjustment_out">Ajuste de saída</option>
+                      </select>
+                    </label>
+                    <label className="block text-sm"><span className="mb-1 block text-gray-600">Valor</span><input name="amount" type="number" min="0.01" step="0.01" required className="w-full rounded-lg border border-gray-300 px-3 py-2" /></label>
+                    <label className="block text-sm"><span className="mb-1 block text-gray-600">Data</span><input name="movement_date" type="datetime-local" defaultValue={new Date().toISOString().slice(0, 16)} required className="w-full rounded-lg border border-gray-300 px-3 py-2" /></label>
+                  </div>
+                  <label className="block text-sm">
+                    <span className="mb-1 block text-gray-600">Descrição</span>
+                    <input name="description" className="w-full rounded-lg border border-gray-300 px-3 py-2" />
+                  </label>
+                </>
+              )}
+              <div className="flex justify-end gap-3 pt-2">
+                <button type="button" onClick={() => setCreateDialog(null)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm">Cancelar</button>
+                <button type="submit" disabled={creating} className="rounded-lg bg-pink-600 px-4 py-2 text-sm font-medium text-white hover:bg-pink-700 disabled:opacity-50">
+                  {creating ? 'Salvando...' : 'Salvar'}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
     </div>
   )
 }

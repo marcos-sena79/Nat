@@ -9,53 +9,41 @@ export default function Navbar() {
   const { isAuthenticated, user, logout } = useAuthStore()
 
   return (
-    <header className="bg-white shadow-sm sticky top-0 z-50">
-      <div className="container mx-auto px-4 py-4">
-        <div className="flex items-center justify-between">
-          <Link href="/" className="text-2xl font-bold text-pink-600">
-            Body Piercing Studio
-          </Link>
-          <nav className="flex items-center gap-6">
-            <Link href="/catalog" className="text-gray-600 hover:text-pink-600 transition">
-              Catálogo
-            </Link>
-            <Link href="/scheduling" className="text-gray-600 hover:text-pink-600 transition">
-              Agendamento
-            </Link>
-            <Link href="/aftercare" className="text-gray-600 hover:text-pink-600 transition">
-              Cuidados
-            </Link>
-            <Link href="/cart" className="relative text-gray-600 hover:text-pink-600 transition">
-              Carrinho
-              {itemCount > 0 && (
-                <span className="absolute -top-2 -right-4 bg-pink-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                  {itemCount}
-                </span>
-              )}
-            </Link>
-            {isAuthenticated ? (
-              <div className="flex items-center gap-4">
-                {user?.role === 'admin' && (
-                  <Link href="/admin" className="text-gray-600 hover:text-pink-600 transition">
-                    Admin
-                  </Link>
-                )}
-                <button
-                  onClick={logout}
-                  className="text-gray-600 hover:text-pink-600 transition"
-                >
-                  Sair
-                </button>
-              </div>
-            ) : (
-              <Link
-                href="/login"
-                className="bg-pink-600 text-white px-4 py-2 rounded-lg hover:bg-pink-700 transition"
-              >
-                Entrar
-              </Link>
+    <header className="sticky top-0 z-50 border-b border-black/5 bg-[#fff8f3]/95 backdrop-blur">
+      <div className="border-b border-black/5 bg-[#f6ece1] py-2 text-center text-[10px] font-medium uppercase tracking-[0.16em] text-[#51484d]">
+        ✦ Joias em titânio ASTM F-136 · Atendimento presencial e domiciliar em São Paulo
+      </div>
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-5 py-4 lg:px-8">
+        <Link href="/" className="shrink-0 leading-tight text-[#221b25]">
+          <span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-[#8a4b59]">Atelier</span>
+          <span className="font-serif text-xl tracking-tight">Corpo &amp; Cor</span>
+        </Link>
+        <nav className="hidden items-center gap-7 text-xs text-[#51484d] md:flex">
+          <Link href="/" className="transition hover:text-[#8a4b59]">Início</Link>
+          <Link href="/catalog" className="transition hover:text-[#8a4b59]">Joias &amp; Coleções</Link>
+          <Link href="/scheduling" className="transition hover:text-[#8a4b59]">Agendamento</Link>
+          <Link href="/aftercare" className="transition hover:text-[#8a4b59]">Pós-perfuração &amp; IA</Link>
+        </nav>
+        <div className="flex items-center gap-2 sm:gap-3">
+          <Link href="/cart" aria-label={`Carrinho${itemCount ? `, ${itemCount} itens` : ''}`} className="relative rounded-full border border-black/10 px-3 py-2 text-xs transition hover:bg-[#f6ece1]">
+            <span className="hidden sm:inline">Sacola</span><span className="sm:hidden">♡</span>
+            {itemCount > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#8a4b59] px-1 text-[9px] text-white">
+                {itemCount}
+              </span>
             )}
-          </nav>
+          </Link>
+          {isAuthenticated ? (
+            <div className="flex items-center gap-3">
+              {user?.role === 'admin' && <Link href="/admin" className="hidden text-xs text-[#51484d] hover:text-[#8a4b59] sm:block">Painel</Link>}
+              <button onClick={logout} className="text-xs text-[#51484d] transition hover:text-[#8a4b59]">Sair</button>
+            </div>
+          ) : (
+            <Link href="/login" className="hidden text-xs text-[#51484d] transition hover:text-[#8a4b59] sm:block">Área do cliente</Link>
+          )}
+          <Link href="/scheduling" className="rounded-full bg-[#8a4b59] px-4 py-2.5 text-[11px] font-medium text-white transition hover:bg-[#6f3542] sm:px-5">
+            Agendar horário
+          </Link>
         </div>
       </div>
     </header>

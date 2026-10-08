@@ -53,7 +53,7 @@ export default function CatalogPage() {
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <Link href="/" className="text-2xl font-bold text-pink-600">
-              Body Piercing Studio
+              Atelier Corpo & Cor
             </Link>
             <nav className="flex items-center gap-6">
               <Link href="/catalog" className="text-pink-600 font-semibold">
