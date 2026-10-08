@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     
     # AI Service
     AI_API_KEY: Optional[str] = None
+    AI_API_URL: Optional[str] = None
     AI_MODEL: str = "gpt-4-vision-preview"
     
     # Maps/Geocoding

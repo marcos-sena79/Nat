@@ -57,6 +57,8 @@ class CostSheetResponse(CostSheetBase):
 class CostSheetList(BaseModel):
     id: int
     item_type: ItemType
+    product_id: Optional[int] = None
+    service_id: Optional[int] = None
     product_name: Optional[str] = None
     service_name: Optional[str] = None
     total_cost: Optional[Decimal] = None

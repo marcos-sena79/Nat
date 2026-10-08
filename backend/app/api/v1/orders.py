@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from ...core.database import get_db
 from ...core.security import get_current_active_user, get_current_admin_user
@@ -91,20 +91,40 @@ def validate_cart(
     
     if cart.coupon_code:
         coupon = db.query(Coupon).filter(
-            Coupon.code == cart.coupon_code,
+            Coupon.code == cart.coupon_code.strip().upper(),
             Coupon.status == "active"
         ).first()
         
         if coupon:
-            # Validate coupon
-            now = datetime.utcnow()
-            if coupon.start_date <= now <= coupon.end_date:
-                # Check usage limits
-                usage_count = db.query(CouponUsage).filter(
+            now = datetime.now(timezone.utc)
+            start_date = coupon.start_date
+            end_date = coupon.end_date
+            if start_date.tzinfo is None:
+                start_date = start_date.replace(tzinfo=timezone.utc)
+            if end_date.tzinfo is None:
+                end_date = end_date.replace(tzinfo=timezone.utc)
+
+            if start_date <= now <= end_date:
+                usage_query = db.query(CouponUsage).filter(
                     CouponUsage.coupon_id == coupon.id
+                )
+                usage_count = usage_query.count()
+                client_usage_count = usage_query.filter(
+                    CouponUsage.client_id == current_user.client_profile.id
                 ).count()
-                
-                if coupon.max_uses is None or usage_count < coupon.max_uses:
+
+                meets_minimum = (
+                    coupon.minimum_order_value is None
+                    or subtotal >= coupon.minimum_order_value
+                )
+                within_global_limit = (
+                    coupon.max_uses is None or usage_count < coupon.max_uses
+                )
+                within_client_limit = (
+                    client_usage_count < coupon.max_uses_per_client
+                )
+
+                if meets_minimum and within_global_limit and within_client_limit:
                     # Calculate discount
                     if coupon.discount_type == "percentage":
                         discount_amount = subtotal * (coupon.discount_value / 100)

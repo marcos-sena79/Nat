@@ -26,8 +26,21 @@ def list_cost_sheets(
     if item_type:
         query = query.filter(CostSheet.item_type == item_type)
     
-    cost_sheets = query.all()
-    return cost_sheets
+    cost_sheets = query.order_by(CostSheet.created_at.desc()).all()
+    results = []
+    for cost_sheet in cost_sheets:
+        details = get_cost_sheet(cost_sheet.id, db, current_user)
+        results.append({
+            "id": cost_sheet.id,
+            "item_type": cost_sheet.item_type,
+            "product_id": cost_sheet.product_id,
+            "service_id": cost_sheet.service_id,
+            "product_name": cost_sheet.product.name if cost_sheet.product else None,
+            "service_name": cost_sheet.service.name if cost_sheet.service else None,
+            "total_cost": details.total_cost,
+            "suggested_price": details.suggested_price,
+        })
+    return results
 
 @router.get("/cost-sheets/{cost_sheet_id}", response_model=CostSheetResponse)
 def get_cost_sheet(

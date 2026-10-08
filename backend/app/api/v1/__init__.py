@@ -10,6 +10,7 @@ from .aftercare import router as aftercare_router
 from .finance import router as finance_router
 from .notifications import router as notifications_router
 from .admin import router as admin_router
+from .coupons import router as coupons_router
 
 api_router = APIRouter()
 
@@ -24,3 +25,4 @@ api_router.include_router(aftercare_router, prefix="/aftercare", tags=["Aftercar
 api_router.include_router(finance_router, prefix="/finance", tags=["Finance"])
 api_router.include_router(notifications_router, prefix="/notifications", tags=["Notifications"])
 api_router.include_router(admin_router, prefix="/admin", tags=["Admin"])
+api_router.include_router(coupons_router, prefix="/coupons", tags=["Coupons"])

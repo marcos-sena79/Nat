@@ -7,7 +7,7 @@ import toast from 'react-hot-toast'
 import { isAxiosError } from 'axios'
 
 type AdminTab = 'dashboard' | 'products' | 'services' | 'orders' | 'appointments' | 'inventory' | 'pricing' | 'finance' | 'reviews' | 'coupons'
-type CreateDialog = 'product' | 'service' | 'supply' | 'movement' | null
+type CreateDialog = 'product' | 'service' | 'supply' | 'movement' | 'coupon' | null
 
 interface DashboardSummary {
   total_revenue: number
@@ -91,6 +91,17 @@ interface FinancialMovement {
   movement_date: string
 }
 
+interface Coupon {
+  id: number
+  code: string
+  name: string
+  discount_type: 'percentage' | 'fixed'
+  discount_value: number
+  status: 'draft' | 'active' | 'paused' | 'expired' | 'exhausted'
+  start_date: string
+  end_date: string
+}
+
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard')
   const [dashboard, setDashboard] = useState<DashboardSummary | null>(null)
@@ -102,6 +113,7 @@ export default function AdminPage() {
   const [costSheets, setCostSheets] = useState<CostSheet[]>([])
   const [reviews, setReviews] = useState<Review[]>([])
   const [movements, setMovements] = useState<FinancialMovement[]>([])
+  const [coupons, setCoupons] = useState<Coupon[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [savingId, setSavingId] = useState<number | null>(null)
@@ -150,7 +162,7 @@ export default function AdminPage() {
           setMovements((await api.get<FinancialMovement[]>('/finance/movements')).data)
           break
         case 'coupons':
-          setLoadError('O backend atual ainda não disponibiliza uma rota administrativa para listar ou gerenciar cupons.')
+          setCoupons((await api.get<Coupon[]>('/coupons')).data)
           break
       }
     } catch (error) {
@@ -236,7 +248,10 @@ export default function AdminPage() {
 
     const formData = new FormData(event.currentTarget)
     let endpoint = ''
-    let payload: Record<string, string | number | boolean> = {}
+    let payload: Record<
+      string,
+      string | number | boolean | null | Array<Record<string, string | number | boolean | null>>
+    > = {}
     let tab: AdminTab = activeTab
 
     if (createDialog === 'product') {
@@ -275,6 +290,24 @@ export default function AdminPage() {
         current_stock: Number(formData.get('current_stock')),
         min_stock: Number(formData.get('min_stock')),
       }
+    } else if (createDialog === 'coupon') {
+      endpoint = '/coupons'
+      tab = 'coupons'
+      payload = {
+        code: String(formData.get('code')).trim().toUpperCase(),
+        name: String(formData.get('name')),
+        discount_type: String(formData.get('discount_type')),
+        discount_value: Number(formData.get('discount_value')),
+        start_date: new Date(String(formData.get('start_date'))).toISOString(),
+        end_date: new Date(String(formData.get('end_date'))).toISOString(),
+        max_uses: Number(formData.get('max_uses')) || null,
+        max_uses_per_client: Number(formData.get('max_uses_per_client')) || 1,
+        minimum_order_value: Number(formData.get('minimum_order_value')) || 0,
+        is_cumulative: false,
+        status: String(formData.get('status')),
+        notes: String(formData.get('notes') || ''),
+        rules: [],
+      }
     } else {
       endpoint = '/finance/movements'
       tab = 'finance'
@@ -297,6 +330,19 @@ export default function AdminPage() {
       toast.error(isAxiosError(error) ? error.response?.data?.detail || 'Não foi possível salvar os dados' : 'Não foi possível salvar os dados')
     } finally {
       setCreating(false)
+    }
+  }
+
+  const updateCouponStatus = async (couponId: number, newStatus: Coupon['status']) => {
+    setSavingId(couponId)
+    try {
+      await api.put(`/coupons/${couponId}/status`, null, { params: { new_status: newStatus } })
+      toast.success('Status do cupom atualizado')
+      await fetchData('coupons')
+    } catch (error) {
+      toast.error(isAxiosError(error) ? error.response?.data?.detail || 'Não foi possível atualizar o cupom' : 'Não foi possível atualizar o cupom')
+    } finally {
+      setSavingId(null)
     }
   }
 
@@ -735,9 +781,54 @@ export default function AdminPage() {
                 <div className="bg-white rounded-lg shadow-md overflow-hidden">
                   <div className="p-4 border-b flex justify-between items-center">
                     <h2 className="text-xl font-semibold">Cupons de Desconto</h2>
+                    <button
+                      onClick={() => setCreateDialog('coupon')}
+                      className="bg-pink-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-pink-700"
+                    >+ Novo Cupom</button>
                   </div>
-                  <div className="p-4">
-                    <p className="py-8 text-center text-gray-500">O backend atual não oferece gerenciamento administrativo de cupons.</p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Código</th>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Cupom</th>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Desconto</th>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Validade</th>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {coupons.length === 0 ? (
+                          <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-500">Nenhum cupom cadastrado.</td></tr>
+                        ) : coupons.map((coupon) => (
+                          <tr key={coupon.id}>
+                            <td className="px-4 py-3 text-sm font-semibold">{coupon.code}</td>
+                            <td className="px-4 py-3 text-sm">{coupon.name}</td>
+                            <td className="px-4 py-3 text-sm">
+                              {coupon.discount_type === 'percentage'
+                                ? `${Number(coupon.discount_value)}%`
+                                : Number(coupon.discount_value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </td>
+                            <td className="px-4 py-3 text-sm">
+                              {new Date(coupon.start_date).toLocaleDateString('pt-BR')} – {new Date(coupon.end_date).toLocaleDateString('pt-BR')}
+                            </td>
+                            <td className="px-4 py-3 text-sm">
+                              <select
+                                value={coupon.status}
+                                onChange={(event) => void updateCouponStatus(coupon.id, event.target.value as Coupon['status'])}
+                                disabled={savingId === coupon.id}
+                                aria-label={`Status do cupom ${coupon.code}`}
+                                className="rounded border border-gray-200 bg-white px-2 py-1 text-xs disabled:opacity-50"
+                              >
+                                {(['draft', 'active', 'paused', 'expired', 'exhausted'] as const).map((status) => (
+                                  <option key={status} value={status}>{status}</option>
+                                ))}
+                              </select>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               )}
@@ -833,16 +924,32 @@ export default function AdminPage() {
           >
             <div className="mb-5 flex items-center justify-between gap-4">
               <h2 id="create-entry-title" className="text-xl font-semibold">
-                {createDialog === 'product' ? 'Novo produto' : createDialog === 'service' ? 'Novo serviço' : createDialog === 'supply' ? 'Novo insumo' : 'Novo lançamento financeiro'}
+                {createDialog === 'product' ? 'Novo produto' : createDialog === 'service' ? 'Novo serviço' : createDialog === 'supply' ? 'Novo insumo' : createDialog === 'coupon' ? 'Novo cupom' : 'Novo lançamento financeiro'}
               </h2>
               <button type="button" onClick={() => setCreateDialog(null)} className="rounded px-2 py-1 text-gray-500 hover:bg-gray-100" aria-label="Fechar">✕</button>
             </div>
             <form onSubmit={createEntry} className="space-y-4">
-              {(createDialog === 'product' || createDialog === 'service' || createDialog === 'supply') && (
+              {(createDialog === 'product' || createDialog === 'service' || createDialog === 'supply' || createDialog === 'coupon') && (
                 <label className="block text-sm">
                   <span className="mb-1 block text-gray-600">Nome</span>
                   <input name="name" required className="w-full rounded-lg border border-gray-300 px-3 py-2" />
                 </label>
+              )}
+              {createDialog === 'coupon' && (
+                <>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <label className="block text-sm"><span className="mb-1 block text-gray-600">Código</span><input name="code" required maxLength={40} className="w-full rounded-lg border border-gray-300 px-3 py-2 uppercase" /></label>
+                    <label className="block text-sm"><span className="mb-1 block text-gray-600">Status inicial</span><select name="status" className="w-full rounded-lg border border-gray-300 px-3 py-2"><option value="draft">Rascunho</option><option value="active">Ativo</option></select></label>
+                    <label className="block text-sm"><span className="mb-1 block text-gray-600">Tipo de desconto</span><select name="discount_type" className="w-full rounded-lg border border-gray-300 px-3 py-2"><option value="percentage">Percentual (%)</option><option value="fixed">Valor fixo (R$)</option></select></label>
+                    <label className="block text-sm"><span className="mb-1 block text-gray-600">Desconto</span><input name="discount_value" type="number" min="0.01" step="0.01" required className="w-full rounded-lg border border-gray-300 px-3 py-2" /></label>
+                    <label className="block text-sm"><span className="mb-1 block text-gray-600">Início</span><input name="start_date" type="datetime-local" required defaultValue={new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)} className="w-full rounded-lg border border-gray-300 px-3 py-2" /></label>
+                    <label className="block text-sm"><span className="mb-1 block text-gray-600">Término</span><input name="end_date" type="datetime-local" required className="w-full rounded-lg border border-gray-300 px-3 py-2" /></label>
+                    <label className="block text-sm"><span className="mb-1 block text-gray-600">Limite de usos (0 = sem limite)</span><input name="max_uses" type="number" min="0" defaultValue="0" className="w-full rounded-lg border border-gray-300 px-3 py-2" /></label>
+                    <label className="block text-sm"><span className="mb-1 block text-gray-600">Usos por cliente</span><input name="max_uses_per_client" type="number" min="1" defaultValue="1" required className="w-full rounded-lg border border-gray-300 px-3 py-2" /></label>
+                  </div>
+                  <label className="block text-sm"><span className="mb-1 block text-gray-600">Pedido mínimo (R$)</span><input name="minimum_order_value" type="number" min="0" step="0.01" defaultValue="0" className="w-full rounded-lg border border-gray-300 px-3 py-2" /></label>
+                  <label className="block text-sm"><span className="mb-1 block text-gray-600">Observações</span><textarea name="notes" rows={2} className="w-full rounded-lg border border-gray-300 px-3 py-2" /></label>
+                </>
               )}
               {createDialog === 'product' && (
                 <>
@@ -936,7 +1043,7 @@ export default function AdminPage() {
                       </select>
                     </label>
                     <label className="block text-sm"><span className="mb-1 block text-gray-600">Valor</span><input name="amount" type="number" min="0.01" step="0.01" required className="w-full rounded-lg border border-gray-300 px-3 py-2" /></label>
-                    <label className="block text-sm"><span className="mb-1 block text-gray-600">Data</span><input name="movement_date" type="datetime-local" defaultValue={new Date().toISOString().slice(0, 16)} required className="w-full rounded-lg border border-gray-300 px-3 py-2" /></label>
+                    <label className="block text-sm"><span className="mb-1 block text-gray-600">Data</span><input name="movement_date" type="datetime-local" defaultValue={new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)} required className="w-full rounded-lg border border-gray-300 px-3 py-2" /></label>
                   </div>
                   <label className="block text-sm">
                     <span className="mb-1 block text-gray-600">Descrição</span>
